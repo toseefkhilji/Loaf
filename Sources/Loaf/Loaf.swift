@@ -261,7 +261,7 @@ protocol LoafDelegate: AnyObject {
     func loafDidDismiss()
 }
 
-final class LoafViewController: UIViewController {
+final public class LoafViewController: UIViewController {
     var loaf: Loaf
     
     let label = UILabel()
