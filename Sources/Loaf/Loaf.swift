@@ -177,10 +177,14 @@ final public class Loaf {
     /// Show the loaf for a specified duration. (Default is `.average`)
     ///
     /// - Parameter duration: Length the loaf will be presented
-    public func show(_ duration: Duration = .average, completionHandler: LoafCompletionHandler = nil) {
+    public func show(_ duration: Duration = .average, forceDismissExisting: Bool = false ,completionHandler: LoafCompletionHandler = nil) {
         self.duration = duration
         self.completionHandler = completionHandler
-        LoafManager.shared.queueAndPresent(self)
+        if forceDismissExisting {
+            LoafManager.shared.onlyPresent(self)
+        } else {
+            LoafManager.shared.queueAndPresent(self)
+        }
     }
 	
 	/// Manually dismiss a currently presented Loaf
@@ -193,6 +197,14 @@ final public class Loaf {
 			vc.delegate?.loafDidDismiss()
 		}
 	}
+
+    /// Manually dismiss a currently presented Loaf
+    ///
+    /// - Parameter animated: Whether the dismissal will be animated
+    public static func dismissAll(animated: Bool = true){
+        guard LoafManager.shared.isPresenting else { return }
+        LoafManager.shared.dismissAllLoafs(animated: animated)
+    }
 }
 
 final fileprivate class LoafManager: LoafDelegate {
@@ -200,7 +212,14 @@ final fileprivate class LoafManager: LoafDelegate {
     
     fileprivate var queue = Queue<Loaf>()
     fileprivate var isPresenting = false
-    
+
+    fileprivate func onlyPresent(_ loaf: Loaf) {
+        dismissAllLoafs(animated: false) { [weak self] in
+            self?.queue.enqueue(loaf)
+            self?.presentIfPossible()
+        }
+    }
+
     fileprivate func queueAndPresent(_ loaf: Loaf) {
         queue.enqueue(loaf)
         presentIfPossible()
@@ -217,6 +236,24 @@ final fileprivate class LoafManager: LoafDelegate {
         let loafVC = LoafViewController(loaf)
         loafVC.delegate = self
         sender.presentToast(loafVC)
+    }
+
+    fileprivate func dismissAllLoafs(animated: Bool, completion: (() -> Void)? = nil) {
+        queue.removeAll() // Clear the queue
+        isPresenting = false
+
+        if let presentedLoaf = UIApplication.shared.keyWindow?.rootViewController?.presentedViewController as? LoafViewController {
+            // Dismiss the currently presented Loaf, if any
+            presentedLoaf.dismiss(animated: animated) { [weak self] in
+                self?.isPresenting = false
+                self?.presentIfPossible()
+                completion?() // Call the completion block
+            }
+        } else {
+            // No Loaf currently presented, but clear the queue
+            presentIfPossible()
+            completion?() // Call the completion block
+        }
     }
 }
 
@@ -369,6 +406,10 @@ private struct Queue<T> {
     
     mutating func enqueue(_ element: T) {
         array.append(element)
+    }
+
+    mutating func removeAll() {
+        array.removeAll()
     }
     
     mutating func dequeue() -> T? {
